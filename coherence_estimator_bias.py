@@ -9,13 +9,14 @@ Author: Seth R. Larner
 """
 
 import multiprocessing
+from typing import Dict, Tuple, List, Optional, Union
+
 import numpy as np
+from numpy.typing import NDArray
 import matplotlib.pyplot as plt
+import matplotlib.figure
 from scipy.special import hyp2f1
 import mpmath
-import warnings
-import multiprocessing
-from functools import partial
 
 # Set plotting style
 plt.rcParams['figure.dpi'] = 300
@@ -33,6 +34,10 @@ N_TRIALS = 50000       # Number of Monte Carlo trials
 SEGMENT_COUNTS = [4, 8, 16, 32]  # Values of N to test
 TRUE_COHERENCE_VALUES = np.arange(0, 0.999 + 0.001, 0.001)  # True γ² values
 
+# Multiprocessing options
+USE_MULTIPROCESSING = True  # Enable parallel processing
+N_CORES = None  # Number of CPU cores to use (None = use all available)
+
 # Colors for plotting
 COLORS = ['#0000FF', '#FFA500', '#008000', '#FF0000', '#800080', '#000000']
 
@@ -40,10 +45,10 @@ COLORS = ['#0000FF', '#FFA500', '#008000', '#FF0000', '#800080', '#000000']
 # =============================================================================
 # Theoretical Bias Formulas
 # =============================================================================
-def _robust_hyp2f1(a, b, c, z):
+def _robust_hyp2f1(a: float, b: float, c: float, z: float) -> float:
     """
     Robust evaluation of ₂F₁ using scipy with mpmath fallback.
-    
+
     Scipy's hyp2f1 can return NaN for large c values near z=1 due to
     numerical instabilities. Mpmath uses arbitrary precision arithmetic
     and handles these cases correctly.
@@ -55,24 +60,24 @@ def _robust_hyp2f1(a, b, c, z):
     return result
 
 
-def exact_expected_msc(gamma2, n):
+def exact_expected_msc(gamma2: Union[float, NDArray[np.floating]], n: int) -> Union[float, NDArray[np.floating]]:
     """
     Exact expected value of the MSC estimator from Nuttall & Carter (1976) Eq.1
-    
+
     E[γ̂²] = 1/n + (n-1)/(n+1) * γ² * ₂F₁(1, 1; n+2; γ²)
-    
+
     Parameters
     ----------
     gamma2 : float or array
         True coherence squared
     n : int
         Number of segments averaged
-    
+
     Returns
     -------
     float or array
         Expected value of the MSC estimator
-    
+
     Notes
     -----
     Uses mpmath fallback for numerical stability when scipy's hyp2f1 fails
@@ -96,23 +101,23 @@ def exact_expected_msc(gamma2, n):
         return result
 
 
-def exact_bias(gamma2, n):
+def exact_bias(gamma2: Union[float, NDArray[np.floating]], n: int) -> Union[float, NDArray[np.floating]]:
     """
     Exact bias: E[γ̂²] - γ²
     """
     return exact_expected_msc(gamma2, n) - gamma2
 
 
-def approx_bias(gamma2, n):
+def approx_bias(gamma2: Union[float, NDArray[np.floating]], n: int) -> Union[float, NDArray[np.floating]]:
     """
     Approximate bias from Nuttall & Carter (1976) Eq.2
-    
+
     bias ≈ (1-γ²)²/n * (1 + 2γ²/n)
     """
     return (1 - gamma2)**2 / n * (1 + 2*gamma2/n)
 
 
-def leading_order_bias(gamma2, n):
+def leading_order_bias(gamma2: Union[float, NDArray[np.floating]], n: int) -> Union[float, NDArray[np.floating]]:
     """
     Leading order approximation: bias ≈ (1-γ²)²/n
     """
@@ -122,22 +127,22 @@ def leading_order_bias(gamma2, n):
 # =============================================================================
 # Single Trial Coherence Estimation
 # =============================================================================
-def single_trial_msc(true_gamma2, n_segments):
+def single_trial_msc(true_gamma2: float, n_segments: int) -> float:
     """
     Generate one estimate of MSC from N segments at a single frequency.
-    
+
     Using the synthetic LC method:
     Y = T*X + sqrt(1-|T|²) * noise
-    
+
     For equal PSDs (PX = PY = 2), |T|² = γ²
-    
+
     Parameters
     ----------
     true_gamma2 : float
         True coherence squared (0 <= γ² <= 1)
     n_segments : int
         Number of segments to average
-    
+
     Returns
     -------
     float
@@ -178,49 +183,104 @@ def single_trial_msc(true_gamma2, n_segments):
 # =============================================================================
 # Monte Carlo Simulation
 # =============================================================================
-def run_simulation(n_trials=N_TRIALS, segment_counts=SEGMENT_COUNTS, 
-                   coherence_values=TRUE_COHERENCE_VALUES, verbose=True):
+def _worker_single_trial(args: Tuple[float, int]) -> float:
+    """
+    Worker function for parallel execution of single trial.
+
+    Parameters
+    ----------
+    args : tuple
+        (true_gamma2, n_segments) for single_trial_msc
+
+    Returns
+    -------
+    float
+        MSC estimate for this trial
+    """
+    gamma2, n = args
+    return single_trial_msc(gamma2, n)
+
+
+def run_simulation(
+    n_trials: int = N_TRIALS,
+    segment_counts: List[int] = SEGMENT_COUNTS,
+    coherence_values: NDArray[np.floating] = TRUE_COHERENCE_VALUES,
+    verbose: bool = True,
+    use_multiprocessing: bool = USE_MULTIPROCESSING,
+    n_cores: Optional[int] = N_CORES
+) -> Dict[Tuple[int, float], Tuple[float, float]]:
     """
     Run Monte Carlo simulation to estimate bias and variance.
-    
+
+    Parameters
+    ----------
+    n_trials : int
+        Number of Monte Carlo trials per (n, gamma2) combination
+    segment_counts : list of int
+        Values of N to test
+    coherence_values : array
+        True coherence squared values to test
+    verbose : bool
+        Print progress messages
+    use_multiprocessing : bool
+        Enable parallel processing using multiprocessing.Pool
+    n_cores : int or None
+        Number of CPU cores to use (None = use all available)
+
     Returns
     -------
     dict
         Dictionary with keys (n, gamma2) and values (mean_estimate, std_estimate)
     """
     results = {}
-    
+
     if verbose:
         print(f"Running Monte Carlo simulation with {n_trials} trials...")
+        if use_multiprocessing:
+            cores = n_cores if n_cores is not None else multiprocessing.cpu_count()
+            print(f"Using multiprocessing with {cores} cores.")
+        else:
+            print("Running single-threaded.")
         print("This may take a few minutes.")
-    
+
     for n in segment_counts:
         if verbose:
             print(f"  Processing N={n}...", end=" ", flush=True)
-        
+
         for gamma2 in coherence_values[::10]:
-            # Generate n_trials estimates
-            estimates = np.array([single_trial_msc(gamma2, n) for _ in range(n_trials)])
-            
+            if use_multiprocessing:
+                # Parallel execution
+                with multiprocessing.Pool(processes=n_cores) as pool:
+                    # Create argument list for all trials
+                    args_list = [(gamma2, n) for _ in range(n_trials)]
+                    estimates = np.array(pool.map(_worker_single_trial, args_list))
+            else:
+                # Sequential execution
+                estimates = np.array([single_trial_msc(gamma2, n) for _ in range(n_trials)])
+
             # Compute statistics
             mean_est = np.mean(estimates)
             std_est = np.std(estimates, ddof=1)
-            
+
             results[(n, gamma2)] = (mean_est, std_est)
         if verbose:
             print("done")
-    
+
     if verbose:
         print("Simulation complete.")
-    
+
     return results
 
 
 # =============================================================================
 # Plotting Functions
 # =============================================================================
-def plot_bias_log(results, segment_counts=SEGMENT_COUNTS, 
-                  coherence_values=TRUE_COHERENCE_VALUES, colors=COLORS):
+def plot_bias_log(
+    results: Dict[Tuple[int, float], Tuple[float, float]],
+    segment_counts: List[int] = SEGMENT_COUNTS,
+    coherence_values: NDArray[np.floating] = TRUE_COHERENCE_VALUES,
+    colors: List[str] = COLORS
+) -> matplotlib.figure.Figure:
     """
     Plot 1: Log of |Bias| vs true coherence for different N
     """
