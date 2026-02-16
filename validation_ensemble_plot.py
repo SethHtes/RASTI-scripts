@@ -473,7 +473,7 @@ def create_validation_plot(stats, psd1_model, psd2_model, coh_model, lag_model, 
     )
     axes[0].plot(
         freq_fine, psd1_model(freq_fine) * scale1 * freq_fine,
-        color='red', linewidth=3, label='Input model (scaled)', zorder=1
+        color='red', linewidth=3, label='Input model', zorder=1
     )
 
     # Plot individual Lorentzian components
@@ -504,7 +504,7 @@ def create_validation_plot(stats, psd1_model, psd2_model, coh_model, lag_model, 
     )
     axes[1].plot(
         freq_fine, psd2_model(freq_fine) * scale2 * freq_fine,
-        color='red', linewidth=3, label='Input model (scaled)', zorder=1
+        color='red', linewidth=3, label='Input model', zorder=1
     )
 
     # Plot individual Lorentzian components
