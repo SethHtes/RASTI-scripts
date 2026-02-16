@@ -464,10 +464,6 @@ def create_validation_plot(stats, psd1_model, psd2_model, coh_model, lag_model, 
     scale1 = (target_rms / rms1_input) ** 2
     scale2 = (target_rms / rms2_input) ** 2
 
-    if config.get('VERBOSE', False):
-        print(f"  PSD normalization scale factors:")
-        print(f"    PSD1: {scale1:.2f}x (input RMS={rms1_input:.4f}, target={target_rms})")
-        print(f"    PSD2: {scale2:.2f}x (input RMS={rms2_input:.4f}, target={target_rms})")
 
     # Panel 0 - PSD1 (log-log)
     axes[0].errorbar(
@@ -612,7 +608,6 @@ if __name__ == '__main__':
     print()
 
     print(f"Running ensemble simulation (N={N_REALIZATIONS} realizations)...")
-    print("  This may take ~5 minutes...")
     ensemble_data = run_ensemble_simulation(
         psd1_model, psd2_model, coh_model, lag_model, config
     )
@@ -628,53 +623,8 @@ if __name__ == '__main__':
     fig, axes = create_validation_plot(
         stats, psd1_model, psd2_model, coh_model, lag_model, config
     )
-    print("  ✓ Plot created")
     print()
 
     print(f"Saving figure to {OUTPUT_FILE}...")
     fig.savefig(OUTPUT_FILE, dpi=150, bbox_inches='tight')
-    print("  ✓ Figure saved")
     print()
-
-    # Numerical validation test
-    print("Numerical validation at key frequencies:")
-    print("-" * 70)
-
-    # Get scale factors for comparison
-    freq_sim = np.fft.rfftfreq(config['TIME_BINS'], d=config['DT'])[1:]
-    psd1_input = psd1_model(freq_sim)
-    psd2_input = psd2_model(freq_sim)
-    rms1_input = np.sqrt(np.trapz(psd1_input, freq_sim))
-    rms2_input = np.sqrt(np.trapz(psd2_input, freq_sim))
-    scale1 = (config['TARGET_RMS'] / rms1_input) ** 2
-    scale2 = (config['TARGET_RMS'] / rms2_input) ** 2
-
-    for test_freq in [5.0, 15.0]:
-        idx = np.argmin(np.abs(stats['freq'] - test_freq))
-        actual_freq = stats['freq'][idx]
-
-        print(f"\nAt ~{actual_freq:.2f} Hz (target {test_freq} Hz):")
-
-        # PSD1
-        model_val = psd1_model(test_freq) * scale1
-        data_val = stats['psd1_mean'][idx]
-        ratio = data_val / model_val if model_val > 0 else 0
-        print(f"  PSD1: model={model_val:.4e}, data={data_val:.4e}, ratio={ratio:.3f}")
-
-        # PSD2
-        model_val = psd2_model(test_freq) * scale2
-        data_val = stats['psd2_mean'][idx]
-        ratio = data_val / model_val if model_val > 0 else 0
-        print(f"  PSD2: model={model_val:.4e}, data={data_val:.4e}, ratio={ratio:.3f}")
-
-        # Coherence
-        model_val = coh_model(test_freq)
-        data_val = stats['coherence_mean'][idx]
-        diff = abs(data_val - model_val)
-        print(f"  Coherence: model={model_val:.4f}, data={data_val:.4f}, diff={diff:.4f}")
-
-        # Phase lag
-        model_val = lag_model(test_freq)
-        data_val = stats['phase_lag_mean'][idx]
-        diff = abs(data_val - model_val)
-        print(f"  Phase lag: model={model_val:.4f}, data={data_val:.4f}, diff={diff:.4f} rad")
