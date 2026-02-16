@@ -492,7 +492,7 @@ def create_validation_plot(stats, psd1_model, psd2_model, coh_model, lag_model, 
             color='red', linewidth=2, linestyle='--', alpha=0.6, zorder=0
         )
 
-    axes[0].set(xscale='log', yscale='log', ylabel=r'$\nu \times \hat{P}_X$ (frac²)')
+    axes[0].set(xscale='log', yscale='log', ylabel=r'$\nu \times \hat{P}_X \; (\mbox{rms}/\mbox{mean})^2$')
     axes[0].grid(True, alpha=0.3)
     axes[0].legend(loc='best', fontsize=14)
 
@@ -522,7 +522,7 @@ def create_validation_plot(stats, psd1_model, psd2_model, coh_model, lag_model, 
             color='red', linewidth=2, linestyle='--', alpha=0.6, zorder=0
         )
 
-    axes[1].set(xscale='log', yscale='log', ylabel=r'$\nu \times \hat{P}_Y$ (frac²)')
+    axes[1].set(xscale='log', yscale='log', ylabel=r'$\nu \times \hat{P}_Y \; (\mbox{rms}/\mbox{mean})^2$')
     axes[1].grid(True, alpha=0.3)
     axes[1].legend(loc='best', fontsize=14)
 
