@@ -47,8 +47,6 @@ pip install stingray
 The validation script also requires:
 - `synthetic-timeseries` package (see link in paper)
 
-
-
 ## Citation
 
 If you use these scripts, please cite:
